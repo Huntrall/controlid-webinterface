@@ -129,6 +129,15 @@ export async function deleteUser(device: Device, userId: number): Promise<{ chan
   return res;
 }
 
+export async function getMaxUserId(device: Device): Promise<number> {
+  const res = await callJson(device, "load_objects.fcgi", {
+    object: "users",
+    fields: ["id"],
+  }) as { users: { id: number }[] };
+  if (!res.users || res.users.length === 0) return 1;
+  return Math.max(...res.users.map((u) => u.id));
+}
+
 export function listUsers(device: Device) {
   return callJson(device, "load_objects.fcgi", { object: "users" });
 }

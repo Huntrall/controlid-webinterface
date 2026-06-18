@@ -42,6 +42,8 @@ export default function UsersPage() {
   const [devices, setDevices] = useState<Device[]>([]);
   const [selectedDevices, setSelectedDevices] = useState<string[]>([]);
   const [deviceUserId, setDeviceUserId] = useState("");
+  const [suggestedCode, setSuggestedCode] = useState<number | null>(null);
+  const [loadingSuggestion, setLoadingSuggestion] = useState(false);
   const [registration, setRegistration] = useState("");
   const [name, setName] = useState("");
   const [photo, setPhoto] = useState<File | null>(null);
@@ -57,6 +59,17 @@ export default function UsersPage() {
         setDevices(data);
         setSelectedDevices(data.map((d: Device) => d.id));
       });
+
+    setLoadingSuggestion(true);
+    fetch("/api/users/next-code")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.nextCode) {
+          setSuggestedCode(data.nextCode);
+          setDeviceUserId(String(data.nextCode));
+        }
+      })
+      .finally(() => setLoadingSuggestion(false));
   }, []);
 
   function handlePhoto(e: React.ChangeEvent<HTMLInputElement>) {
@@ -117,9 +130,19 @@ export default function UsersPage() {
 
     if (allOk) {
       toast.success(`Usuário "${data.user.name}" criado com sucesso!`);
-      setDeviceUserId("");
       setRegistration("");
       setName("");
+      setSuggestedCode(null);
+      setLoadingSuggestion(true);
+      fetch("/api/users/next-code")
+        .then((r) => r.json())
+        .then((d) => {
+          if (d.nextCode) {
+            setSuggestedCode(d.nextCode);
+            setDeviceUserId(String(d.nextCode));
+          }
+        })
+        .finally(() => setLoadingSuggestion(false));
       setPhoto(null);
       setPreview(null);
       if (fileRef.current) fileRef.current.value = "";
@@ -156,12 +179,21 @@ export default function UsersPage() {
                 <Input
                   type="number"
                   min={2}
-                  placeholder="Ex: 100"
+                  placeholder={loadingSuggestion ? "Consultando…" : "Ex: 100"}
                   value={deviceUserId}
-                  onChange={(e) => setDeviceUserId(e.target.value)}
+                  onChange={(e) => {
+                    setDeviceUserId(e.target.value);
+                    setSuggestedCode(null);
+                  }}
                   required
                 />
-                <p className="text-xs text-muted-foreground">ID enviado aos dispositivos (evite 1)</p>
+                <p className="text-xs text-muted-foreground">
+                  {loadingSuggestion
+                    ? "Consultando dispositivos…"
+                    : suggestedCode !== null && deviceUserId === String(suggestedCode)
+                    ? `Sugerido com base nos dispositivos (último + 1)`
+                    : "ID enviado aos dispositivos (evite 1)"}
+                </p>
               </div>
               <div className="space-y-1">
                 <Label>Matrícula / Registro</Label>
