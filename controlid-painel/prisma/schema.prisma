@@ -1,0 +1,51 @@
+generator client {
+  provider        = "prisma-client-js"
+  output          = "../src/generated/prisma"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model PanelUser {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  createdAt    DateTime @default(now())
+}
+
+model Device {
+  id           String        @id @default(cuid())
+  name         String
+  baseUrl      String
+  login        String
+  passwordEnc  String
+  active       Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  dispatchLogs DispatchLog[]
+}
+
+model User {
+  id           Int           @id @default(autoincrement())
+  deviceUserId Int?          @unique
+  registration String        @unique
+  name         String
+  photoPath    String?
+  createdAt    DateTime      @default(now())
+  dispatchLogs DispatchLog[]
+}
+
+model DispatchLog {
+  id        String   @id @default(cuid())
+  userId    Int
+  deviceId  String
+  action    String
+  ok        Boolean
+  message   String
+  createdAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  device Device @relation(fields: [deviceId], references: [id])
+}
