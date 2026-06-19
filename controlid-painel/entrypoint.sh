@@ -12,15 +12,8 @@ const dbFile = path.isAbsolute(dbUrl) ? dbUrl : path.join(process.cwd(), dbUrl);
 fs.mkdirSync(path.dirname(dbFile), { recursive: true });
 
 const db = new DatabaseSync(dbFile);
-const exists = db.prepare(\"SELECT name FROM sqlite_master WHERE type='table' AND name='User'\").all();
-
-if (exists.length === 0) {
-  const sql = fs.readFileSync('/app/schema.sql', 'utf8');
-  db.exec(sql);
-  console.log('[setup] Schema aplicado com sucesso');
-} else {
-  console.log('[setup] Schema ja existe, pulando...');
-}
+db.exec(fs.readFileSync('/app/prisma/schema.sql', 'utf8'));
+console.log('[setup] Schema aplicado');
 db.close();
 "
 

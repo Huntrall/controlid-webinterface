@@ -15,7 +15,6 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN pnpm prisma generate
-RUN pnpm prisma migrate diff --from-empty --to-schema prisma/schema.prisma --script > /app/schema.sql
 RUN pnpm build
 
 # ── Imagem de produção ──────────────────────────────────────────────────
@@ -42,8 +41,6 @@ COPY --from=builder --chown=nextjs:nodejs /app/src/generated ./src/generated
 COPY --from=builder /app/node_modules/@libsql ./node_modules/@libsql
 COPY --from=builder /app/node_modules/.pnpm ./node_modules/.pnpm
 
-# SQL gerado no build para inicializar o banco sem precisar do Prisma CLI em runtime
-COPY --from=builder /app/schema.sql ./schema.sql
 
 # Diretórios persistentes (serão volumes no Docker)
 RUN mkdir -p /app/data /app/storage/photos && \
