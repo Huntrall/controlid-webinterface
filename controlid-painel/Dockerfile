@@ -15,7 +15,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN pnpm prisma generate
-RUN pnpm prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script > /app/schema.sql
+RUN pnpm prisma migrate diff --from-empty --to-schema prisma/schema.prisma --script > /app/schema.sql
 RUN pnpm build
 
 # ── Imagem de produção ──────────────────────────────────────────────────
