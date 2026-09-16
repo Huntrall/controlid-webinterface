@@ -19,5 +19,25 @@ export const authConfig = {
       }
       return true;
     },
+    jwt({ token, user, trigger, session }) {
+      if (user) {
+        token.id = user.id;
+        token.name = user.name;
+        token.email = user.email;
+      }
+      if (trigger === "update" && session) {
+        if (session.name) token.name = session.name;
+        if (session.email) token.email = session.email;
+      }
+      return token;
+    },
+    session({ session, token }) {
+      if (token && session.user) {
+        if (token.id) session.user.id = token.id as string;
+        if (token.name) session.user.name = token.name as string;
+        if (token.email) session.user.email = token.email as string;
+      }
+      return session;
+    },
   },
 } satisfies NextAuthConfig;

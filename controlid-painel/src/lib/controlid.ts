@@ -14,21 +14,44 @@ export interface DispatchResult {
   data?: unknown;
 }
 
+export function cleanBaseUrl(url: string): string {
+  let cleaned = (url || "").trim();
+  if (!/^https?:\/\//i.test(cleaned)) {
+    cleaned = `http://${cleaned}`;
+  }
+  return cleaned.replace(/\/+$/, "");
+}
+
 const sessionCache = new Map<string, { session: string; ts: number }>();
 const SESSION_TTL = 9 * 60 * 1000;
+
+export function invalidateDeviceSession(deviceId: string): void {
+  sessionCache.delete(deviceId);
+}
 
 async function getSession(device: Device): Promise<string> {
   const cached = sessionCache.get(device.id);
   if (cached && Date.now() - cached.ts < SESSION_TTL) return cached.session;
 
-  const res = await fetch(`${device.baseUrl}/login.fcgi`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ login: device.login, password: device.password }),
-  });
+  const url = `${cleanBaseUrl(device.baseUrl)}/login.fcgi`;
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ login: device.login, password: device.password }),
+      signal: AbortSignal.timeout(7000),
+    });
+  } catch (err: unknown) {
+    if (err instanceof Error && err.name === "TimeoutError") {
+      throw new Error(`Tempo esgotado ao conectar em ${device.baseUrl} (dispositivo offline ou IP inacessível)`);
+    }
+    throw new Error(`Falha de rede ao conectar em ${device.baseUrl}: ${err instanceof Error ? err.message : "Erro desconhecido"}`);
+  }
+
   if (!res.ok) throw new Error(`Login falhou (HTTP ${res.status})`);
   const json = await res.json();
-  if (!json.session) throw new Error("Login não retornou sessão");
+  if (!json.session) throw new Error("Login não retornou sessão válida");
   sessionCache.set(device.id, { session: json.session, ts: Date.now() });
   return json.session;
 }
@@ -40,13 +63,23 @@ async function callJson(
   retried = false
 ): Promise<unknown> {
   const session = await getSession(device);
-  const res = await fetch(`${device.baseUrl}/${endpoint}?session=${session}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  const baseUrl = cleanBaseUrl(device.baseUrl);
+  let res: Response;
+  try {
+    res = await fetch(`${baseUrl}/${endpoint}?session=${session}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(10000),
+    });
+  } catch (err: unknown) {
+    if (err instanceof Error && err.name === "TimeoutError") {
+      throw new Error(`Tempo esgotado ao executar ${endpoint}`);
+    }
+    throw err;
+  }
   if ((res.status === 401 || res.status === 403) && !retried) {
-    sessionCache.delete(device.id);
+    invalidateDeviceSession(device.id);
     return callJson(device, endpoint, body, true);
   }
   if (!res.ok) throw new Error(`${endpoint} → HTTP ${res.status}`);
@@ -148,13 +181,15 @@ export async function setUserPhoto(
   imageBytes: Buffer | Uint8Array
 ) {
   const session = await getSession(device);
+  const baseUrl = cleanBaseUrl(device.baseUrl);
   const ts = Math.floor(Date.now() / 1000);
   const res = await fetch(
-    `${device.baseUrl}/user_set_image.fcgi?user_id=${userId}&timestamp=${ts}&match=1&session=${session}`,
+    `${baseUrl}/user_set_image.fcgi?user_id=${userId}&timestamp=${ts}&match=1&session=${session}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/octet-stream" },
       body: imageBytes as BodyInit,
+      signal: AbortSignal.timeout(15000),
     }
   );
   const json = await res.json();
@@ -168,9 +203,36 @@ export async function testConnection(
   device: Device
 ): Promise<{ ok: boolean; message: string }> {
   try {
+    invalidateDeviceSession(device.id);
     await getSession(device);
     return { ok: true, message: "Conexão estabelecida com sucesso" };
   } catch (err) {
+    return {
+      ok: false,
+      message: err instanceof Error ? err.message : "Erro desconhecido",
+    };
+  }
+}
+
+export async function testCustomConnection(params: {
+  baseUrl: string;
+  login: string;
+  password?: string;
+}): Promise<{ ok: boolean; message: string }> {
+  const tempId = `temp-${Date.now()}`;
+  try {
+    const tempDevice: Device = {
+      id: tempId,
+      name: "Teste Temporário",
+      baseUrl: cleanBaseUrl(params.baseUrl),
+      login: params.login.trim(),
+      password: params.password ?? "",
+    };
+    await getSession(tempDevice);
+    invalidateDeviceSession(tempId);
+    return { ok: true, message: "Conexão estabelecida com sucesso!" };
+  } catch (err) {
+    invalidateDeviceSession(tempId);
     return {
       ok: false,
       message: err instanceof Error ? err.message : "Erro desconhecido",

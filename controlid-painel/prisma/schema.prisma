@@ -47,5 +47,5 @@ model DispatchLog {
   createdAt DateTime @default(now())
 
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  device Device @relation(fields: [deviceId], references: [id])
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
 }
