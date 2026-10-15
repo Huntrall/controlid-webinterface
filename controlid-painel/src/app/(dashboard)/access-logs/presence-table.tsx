@@ -19,6 +19,7 @@ import {
   fmtDuration,
   fmtTime,
   type DayReport,
+  type DeviceStatus,
   type PersonDay,
 } from "./shared";
 
@@ -34,6 +35,9 @@ function stayDuration(p: PersonDay, isToday: boolean, nowSec: number): { sec: nu
 
 export function PresenceTable({
   report,
+  devices,
+  deviceFilter,
+  onDeviceFilterChange,
   date,
   maxDate,
   onDateChange,
@@ -41,6 +45,9 @@ export function PresenceTable({
   loading,
 }: {
   report: DayReport | null;
+  devices: DeviceStatus[];
+  deviceFilter: string;
+  onDeviceFilterChange: (id: string) => void;
   date: string;
   maxDate: string;
   onDateChange: (d: string) => void;
@@ -93,7 +100,10 @@ export function PresenceTable({
         stay ? fmtDuration(stay.sec) : "",
         p.inside ? (isToday ? "No local" : "Sem saída registrada") : "Saiu",
         p.passages
-          .map((x) => `${fmtTime(x.time, tz)} ${x.direction === "exit" ? "saída" : "entrada"} (${x.deviceName})`)
+          .map(
+            (x) =>
+              `${fmtTime(x.time, tz)} ${x.direction === "exit" ? "saída" : x.direction === "pass" ? "passagem" : "entrada"} (${x.deviceName})${x.counted ? "" : " [desconsiderado]"}`
+          )
           .join(" | "),
       ];
     });
@@ -149,6 +159,19 @@ export function PresenceTable({
             </button>
           ))}
         </div>
+        <select
+          value={deviceFilter}
+          onChange={(e) => onDeviceFilterChange(e.target.value)}
+          className={cn(fieldCls, "[&>option]:bg-background")}
+          aria-label="Facial"
+        >
+          <option value="all">Todas as faciais</option>
+          {devices.map((d) => (
+            <option key={d.deviceId} value={d.deviceId}>
+              {d.name}
+            </option>
+          ))}
+        </select>
         <select
           value={sort}
           onChange={(e) => setSort(e.target.value as SortKey)}
@@ -233,21 +256,31 @@ export function PresenceTable({
                       </TableCell>
                       <TableCell className="pr-6 text-right">
                         <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                          {p.passages.length}
+                          {p.passages.filter((x) => x.counted).length}
                           {open ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
                         </span>
                       </TableCell>
                     </TableRow>
                     {open && (
                       <TableRow className="border-border/60 bg-muted/15 hover:bg-muted/15">
-                        <TableCell colSpan={6} className="px-6 py-3">
+                        <TableCell colSpan={6} className="px-6 py-3 whitespace-normal">
                           <div className="flex flex-wrap gap-2">
                             {p.passages.map((x, i) => (
                               <div
                                 key={i}
-                                className="flex items-center gap-2 rounded-lg border border-border/60 bg-card/60 px-2.5 py-1.5"
+                                title={
+                                  x.counted
+                                    ? undefined
+                                    : "Desconsiderado: há leitura nas catracas neste dia (o portão pode ter sido segurado)"
+                                }
+                                className={cn(
+                                  "flex items-center gap-2 rounded-lg border border-border/60 bg-card/60 px-2.5 py-1.5",
+                                  !x.counted && "opacity-45 border-dashed"
+                                )}
                               >
-                                <span className="tabular-nums text-sm font-medium">{fmtTime(x.time, tz)}</span>
+                                <span className={cn("tabular-nums text-sm font-medium", !x.counted && "line-through")}>
+                                  {fmtTime(x.time, tz)}
+                                </span>
                                 <DirectionBadge direction={x.direction} />
                                 <span className="text-[11px] text-muted-foreground">{x.deviceName}</span>
                               </div>

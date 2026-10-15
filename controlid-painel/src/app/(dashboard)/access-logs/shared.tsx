@@ -26,7 +26,9 @@ export interface LiveEvent {
 export interface Passage {
   time: number;
   direction: "entry" | "exit" | "pass";
+  deviceId: string;
   deviceName: string;
+  counted: boolean; // false = portão desconsiderado (há leitura nas catracas)
 }
 
 export interface PersonDay {

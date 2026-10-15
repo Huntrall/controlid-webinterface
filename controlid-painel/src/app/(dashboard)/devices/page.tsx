@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { copyText } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -115,8 +116,11 @@ export default function DevicesPage() {
     }
   }
 
-  function handleCopyIp(id: string, url: string) {
-    navigator.clipboard.writeText(url);
+  async function handleCopyIp(id: string, url: string) {
+    if (!(await copyText(url))) {
+      toast.error("Não foi possível copiar. Selecione o endereço e use Ctrl+C.");
+      return;
+    }
     setCopiedId(id);
     toast.success("Endpoint copiado para a área de transferência");
     setTimeout(() => setCopiedId(null), 2000);

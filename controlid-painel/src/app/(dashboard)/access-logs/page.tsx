@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,7 @@ export default function AccessLogsPage() {
   const [freshIds, setFreshIds] = useState<Set<number>>(new Set());
   const [date, setDate] = useState(() => todayIn("America/Sao_Paulo"));
   const [report, setReport] = useState<DayReport | null>(null);
+  const [deviceFilter, setDeviceFilter] = useState("all");
   const [syncing, setSyncing] = useState(false);
   const [nowSec, setNowSec] = useState(() => Math.floor(Date.now() / 1000));
 
@@ -129,7 +130,27 @@ export default function AccessLogsPage() {
   const onlineCount = devices.filter((d) => d.online).length;
   const allOnline = devices.length > 0 && onlineCount === devices.length;
   const isToday = report?.isToday ?? date === todayIn(timeZone);
-  const t = report?.totals;
+
+  // Filtro por facial: mantém quem teve ao menos uma leitura nela no dia e
+  // recalcula os indicadores só com essas pessoas.
+  const filteredReport = useMemo(() => {
+    if (!report || deviceFilter === "all") return report;
+    const people = report.people.filter((p) => p.passages.some((x) => x.deviceId === deviceFilter));
+    let entries = 0;
+    let exits = 0;
+    for (const p of people)
+      for (const x of p.passages) {
+        if (!x.counted) continue;
+        if (x.direction === "exit") exits++;
+        else entries++;
+      }
+    return {
+      ...report,
+      people,
+      totals: { people: people.length, entries, exits, inside: people.filter((p) => p.inside).length },
+    };
+  }, [report, deviceFilter]);
+  const t = filteredReport?.totals;
 
   const tiles = [
     { label: "Pessoas no dia", value: t?.people, icon: Users, cls: "text-indigo-400 bg-indigo-500/15 border-indigo-500/25" },
@@ -245,7 +266,10 @@ export default function AccessLogsPage() {
         <CardContent className="p-0 pb-2">
           {tab === "presence" ? (
             <PresenceTable
-              report={report}
+              report={filteredReport}
+              devices={devices}
+              deviceFilter={deviceFilter}
+              onDeviceFilterChange={setDeviceFilter}
               date={date}
               maxDate={todayIn(timeZone)}
               onDateChange={changeDate}

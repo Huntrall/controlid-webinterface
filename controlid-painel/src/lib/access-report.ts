@@ -6,7 +6,11 @@ const GRANTED = 7;
 interface Passage {
   time: number;
   direction: string;
+  deviceId: string;
   deviceName: string;
+  // false = leitura de portão desconsiderada porque a pessoa tem leitura
+  // nas catracas no mesmo dia (portão costuma ser segurado para outros).
+  counted: boolean;
 }
 
 // Resumo de presença por colaborador em um dia: chegada, última saída,
@@ -23,6 +27,7 @@ export async function getDayReport(date: string) {
       deviceUserId: true,
       userName: true,
       registration: true,
+      deviceId: true,
       device: { select: { name: true } },
     },
   });
@@ -40,17 +45,16 @@ export async function getDayReport(date: string) {
       p = { deviceUserId: r.deviceUserId, name: r.userName, registration: r.registration, passages: [] };
       people.set(r.deviceUserId, p);
     }
-    const prev = p.passages[p.passages.length - 1];
-    // Leitura repetida na mesma direção em menos de 1 min: ignora.
-    if (prev && prev.direction === r.direction && r.time - prev.time < 60) continue;
-    // Portão seguido da catraca de entrada é uma única chegada; fica o
-    // horário do portão, que é quando a pessoa chegou de fato.
-    if (prev && prev.direction === "pass" && r.direction === "entry" && r.time - prev.time < 180) {
-      prev.direction = "entry";
-      prev.deviceName = `${prev.deviceName} → ${r.device.name}`;
-      continue;
-    }
-    p.passages.push({ time: r.time, direction: r.direction, deviceName: r.device.name });
+    // Leitura repetida na mesma facial e direção em menos de 1 min: ignora.
+    const dup = p.passages.findLast((x) => x.deviceId === r.deviceId);
+    if (dup && dup.direction === r.direction && r.time - dup.time < 60) continue;
+    p.passages.push({
+      time: r.time,
+      direction: r.direction,
+      deviceId: r.deviceId,
+      deviceName: r.device.name,
+      counted: true,
+    });
   }
 
   let entries = 0;
@@ -58,11 +62,17 @@ export async function getDayReport(date: string) {
   let inside = 0;
 
   const result = [...people.values()].map((p) => {
-    const firstIn = p.passages.find((x) => x.direction !== "exit");
-    const lastOut = [...p.passages].reverse().find((x) => x.direction === "exit");
-    const last = p.passages[p.passages.length - 1];
+    // Catraca manda: se a pessoa passou por alguma catraca no dia, o portão
+    // vira só informativo. Sem catraca, o portão é o que temos.
+    const hasTurnstile = p.passages.some((x) => x.direction !== "pass");
+    if (hasTurnstile) for (const x of p.passages) x.counted = x.direction !== "pass";
+    const counted = p.passages.filter((x) => x.counted);
+
+    const firstIn = counted.find((x) => x.direction !== "exit");
+    const lastOut = counted.findLast((x) => x.direction === "exit");
+    const last = counted[counted.length - 1];
     const isInside = last.direction !== "exit";
-    for (const x of p.passages) {
+    for (const x of counted) {
       if (x.direction === "exit") exits++;
       else entries++;
     }
