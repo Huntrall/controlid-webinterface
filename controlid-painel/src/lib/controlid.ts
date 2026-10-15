@@ -60,7 +60,8 @@ async function callJson(
   device: Device,
   endpoint: string,
   body: unknown,
-  retried = false
+  retried = false,
+  timeoutMs = 10000
 ): Promise<unknown> {
   const session = await getSession(device);
   const baseUrl = cleanBaseUrl(device.baseUrl);
@@ -70,7 +71,7 @@ async function callJson(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(10000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
   } catch (err: unknown) {
     if (err instanceof Error && err.name === "TimeoutError") {
@@ -80,7 +81,7 @@ async function callJson(
   }
   if ((res.status === 401 || res.status === 403) && !retried) {
     invalidateDeviceSession(device.id);
-    return callJson(device, endpoint, body, true);
+    return callJson(device, endpoint, body, true, timeoutMs);
   }
   if (!res.ok) throw new Error(`${endpoint} → HTTP ${res.status}`);
   return res.json();
@@ -173,6 +174,67 @@ export async function getMaxUserId(device: Device): Promise<number> {
 
 export function listUsers(device: Device) {
   return callJson(device, "load_objects.fcgi", { object: "users" });
+}
+
+export interface DeviceAccessLog {
+  id: number;
+  time: number; // horário local do aparelho codificado como se fosse UTC
+  event: number;
+  user_id: number;
+  portal_id: number;
+}
+
+// Logs com id > afterId (e opcionalmente time >= minDeviceTime), em ordem crescente.
+export async function fetchAccessLogs(
+  device: Device,
+  opts: { afterId: number; minDeviceTime?: number; limit?: number }
+): Promise<DeviceAccessLog[]> {
+  const where: Record<string, unknown> = { id: { ">": opts.afterId } };
+  if (opts.minDeviceTime) where.time = { ">=": opts.minDeviceTime };
+  const res = await callJson(device, "load_objects.fcgi", {
+    object: "access_logs",
+    fields: ["id", "time", "event", "user_id", "portal_id"],
+    where: { access_logs: where },
+    order: ["id"],
+    limit: opts.limit ?? 1000,
+  }, false, 20000) as { access_logs?: DeviceAccessLog[] };
+  return res.access_logs ?? [];
+}
+
+export async function getLatestAccessLogId(device: Device): Promise<number> {
+  const res = await callJson(device, "load_objects.fcgi", {
+    object: "access_logs",
+    fields: ["id"],
+    order: ["descending", "id"],
+    limit: 1,
+  }) as { access_logs?: { id: number }[] };
+  return res.access_logs?.[0]?.id ?? 0;
+}
+
+// Relógio do aparelho (mesma codificação "local como UTC" dos logs).
+export async function getDeviceClock(device: Device): Promise<number> {
+  const res = await callJson(device, "system_information.fcgi", {}) as { time: number };
+  return res.time;
+}
+
+export async function listPortals(device: Device): Promise<{ id: number; name: string }[]> {
+  const res = await callJson(device, "load_objects.fcgi", {
+    object: "portals",
+    fields: ["id", "name"],
+  }) as { portals?: { id: number; name: string }[] };
+  return res.portals ?? [];
+}
+
+export async function listUserNames(
+  device: Device,
+  ids?: number[]
+): Promise<{ id: number; name: string; registration: string }[]> {
+  const res = await callJson(device, "load_objects.fcgi", {
+    object: "users",
+    fields: ["id", "name", "registration"],
+    ...(ids ? { where: { users: { id: ids } } } : {}),
+  }, false, 20000) as { users?: { id: number; name: string; registration: string }[] };
+  return res.users ?? [];
 }
 
 export async function setUserPhoto(

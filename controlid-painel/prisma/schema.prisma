@@ -25,6 +25,7 @@ model Device {
   active       Boolean       @default(true)
   createdAt    DateTime      @default(now())
   dispatchLogs DispatchLog[]
+  accessEvents AccessEvent[]
 }
 
 model User {
@@ -48,4 +49,25 @@ model DispatchLog {
 
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+}
+
+// Passagens lidas das faciais pelo coletor (src/lib/access-collector.ts).
+// time é Unix em segundos, já convertido para UTC real.
+model AccessEvent {
+  id           Int     @id @default(autoincrement())
+  deviceId     String
+  deviceLogId  Int
+  time         Int
+  event        Int // código Control iD (7 = acesso liberado)
+  direction    String // "entry" | "exit" | "pass"
+  portalId     Int?
+  deviceUserId Int
+  userName     String
+  registration String?
+
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@unique([deviceId, deviceLogId, time])
+  @@index([time])
+  @@index([deviceUserId, time])
 }

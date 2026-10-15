@@ -13,6 +13,8 @@ import {
   ShieldCheck,
   ChevronRight,
   Activity,
+  Users,
+  Clock,
 } from "lucide-react";
 
 const navItems = [
@@ -39,6 +41,18 @@ const navItems = [
     label: "Configurações",
     description: "Perfil de admin e senhas",
     icon: Settings,
+  },
+  {
+    href: "/panel-users",
+    label: "Gestores",
+    description: "Contas de acesso ao painel",
+    icon: Users,
+  },
+  {
+    href: "/access-logs",
+    label: "Relatório de Acessos",
+    description: "Entradas e saídas",
+    icon: Clock,
   },
 ];
 
